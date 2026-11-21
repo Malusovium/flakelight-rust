@@ -24,9 +24,25 @@ let
 
   cargoToml = if hasCargoToml then fromTOML (readFile (src + /Cargo.toml)) else { };
   tomlPackage = cargoToml.package or cargoToml.workspace.package or { };
+
+  # Should match the config.inputs.fenix.packages.${system}.${mapped_release_type}.toolchain
+  fenix_release_type = {
+    nightly = "complete"; # e.g. config.inputs.fenix.package.x86_64.complete.toolchain
+    beta = "beta";
+    stable = "stable";
+  }.${config.releaseType};
 in
 {
   options = {
+    releaseType = mkOption {
+      type = lib.types.enum
+        [ "nightly"
+          "beta"
+          "stable"
+        ];
+      default = "stable";
+    };
+
     fileset = mkOption {
       type = fileset;
       default = unions [
@@ -387,7 +403,7 @@ in
           # config.inputs.fenix.packages.${prev.system}.stable.withComponents
           # but need to have the esp32 stuff work off of the nightly compiler
           # and not stable. This is a for the future thing.
-          rustToolchain = prev.fenix.stable.withComponents [
+          rustToolchain = prev.fenix.${fenix_release_type}.withComponents [
             "cargo"
             "clippy"
             "llvm-tools"
@@ -610,15 +626,16 @@ in
               pkgsFor.craneLib
             else
               let
-                toolchain =
+                make_toolchain = release_type:
                   if target == null then
-                    config.inputs.fenix.packages.${system}.stable.toolchain
+                    config.inputs.fenix.packages.${system}.${release_type}.toolchain
                   else
                     config.inputs.fenix.packages.${system}.combine [
-                      config.inputs.fenix.packages.${system}.stable.cargo
-                      config.inputs.fenix.packages.${system}.stable.rustc
-                      config.inputs.fenix.packages.${system}.targets.${target}.stable.rust-std
+                      config.inputs.fenix.packages.${system}.${release_type}.cargo
+                      config.inputs.fenix.packages.${system}.${release_type}.rustc
+                      config.inputs.fenix.packages.${system}.targets.${target}.${release_type}.rust-std
                     ];
+                toolchain = make_toolchain fenix_release_type;
               in
               (config.inputs.crane.mkLib pkgsFor).overrideToolchain (_: toolchain);
 
